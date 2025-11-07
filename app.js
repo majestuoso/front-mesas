@@ -1,157 +1,201 @@
-// ------------------ ELEMENTOS DEL DOM ------------------
-const listaMesas = document.getElementById('lista-mesas');
-const formCrearMesa = document.getElementById('form-crear-mesa');
-const errorCrear = document.getElementById('error-crear');
-
-const listaReservas = document.getElementById('lista-reservas');
-const formReserva = document.getElementById('form-crear-reserva');
-const selectMesa = document.getElementById('mesa');
-
-// ------------------ DATOS EN MEMORIA ------------------
-let mesas = [
-    { id: 1, numero_mesa: 1, capacidad: 4 },
-    { id: 2, numero_mesa: 2, capacidad: 4 }
-];
-
+let mesas = [];
 let reservas = [];
+let asignaciones = {};
+const maxMesas = 20;
 
-// ------------------ FUNCIONES MESAS ------------------
-function cargarMesas() {
-    listaMesas.innerHTML = '';
-    mesas.forEach(mesa => {
-        const li = document.createElement('li');
-        li.textContent = `ID ${mesa.id} - Mesa ${mesa.numero_mesa} (Capacidad: ${mesa.capacidad})`;
+// ------------------ MESAS ------------------
+function crearMesa() {
+  const capacidad = parseInt(document.getElementById('capacidad').value);
+  const fecha = document.getElementById('fechaMesa').value;
+  if (!fecha || isNaN(capacidad) || capacidad < 1 || capacidad > 4) {
+    alert('Fecha y capacidad válidas requeridas');
+    return;
+  }
 
-        const btnEditar = document.createElement('button');
-        btnEditar.textContent = 'Editar';
-        btnEditar.onclick = () => editarMesa(mesa.id);
+  const numero = [...Array(maxMesas).keys()].map(i => i + 1).find(n => !mesas.some(m => m.numero === n && m.fecha === fecha));
+  if (!numero) {
+    alert('Ya se crearon todas las mesas disponibles para esa fecha');
+    return;
+  }
 
-        const btnEliminar = document.createElement('button');
-        btnEliminar.textContent = 'Eliminar';
-        btnEliminar.onclick = () => eliminarMesa(mesa.id);
-
-        li.appendChild(btnEditar);
-        li.appendChild(btnEliminar);
-        listaMesas.appendChild(li);
-    });
-    cargarSelectMesas();
+  mesas.push({ numero, capacidad, fecha });
+  document.getElementById('capacidad').value = '';
+  document.getElementById('fechaMesa').value = '';
+  mostrarMesas();
+  mostrarReservas();
 }
 
-// Crear mesa
-formCrearMesa.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const numero = parseInt(document.getElementById('numero').value);
-    const capacidad = parseInt(document.getElementById('capacidad').value);
+function mostrarMesas() {
+  const div = document.getElementById('lista-mesas');
+  div.innerHTML = '';
+  mesas.forEach(m => {
+    const li = document.createElement('li');
+    li.textContent = `Mesa ${m.numero} (Cap: ${m.capacidad}) - Fecha: ${m.fecha}`;
 
-    if (capacidad > 4) {
-        alert('Máximo 4 personas por mesa.');
-        return;
+    const btnEditar = document.createElement('button');
+    btnEditar.textContent = 'Editar';
+    btnEditar.onclick = () => editarMesa(m.numero, m.fecha);
+
+    const btnEliminar = document.createElement('button');
+    btnEliminar.textContent = 'Eliminar';
+    btnEliminar.onclick = () => eliminarMesa(m.numero, m.fecha);
+
+    li.appendChild(btnEditar);
+    li.appendChild(btnEliminar);
+    div.appendChild(li);
+  });
+
+  document.getElementById('mesasCreadas').textContent = mesas.length;
+}
+
+function editarMesa(numero, fecha) {
+  const mesa = mesas.find(m => m.numero === numero && m.fecha === fecha);
+  const nuevaCap = prompt('Nueva capacidad:', mesa.capacidad);
+  if (!nuevaCap) return;
+  const cap = parseInt(nuevaCap);
+  if (cap > 4 || cap < 1) {
+    alert('Capacidad inválida');
+    return;
+  }
+  mesa.capacidad = cap;
+  mostrarMesas();
+  mostrarReservas();
+}
+
+function eliminarMesa(numero, fecha) {
+  mesas = mesas.filter(m => !(m.numero === numero && m.fecha === fecha));
+  for (let id in asignaciones) {
+    asignaciones[id] = asignaciones[id].filter(n => n !== numero);
+    if (asignaciones[id].length === 0) delete asignaciones[id];
+  }
+  mostrarMesas();
+  mostrarReservas();
+}
+
+// ------------------ RESERVAS ------------------
+function crearReserva() {
+  const fecha = document.getElementById('fecha').value;
+  const personas = parseInt(document.getElementById('personas').value);
+  if (!fecha || isNaN(personas) || personas < 1) {
+    alert('Complete todos los campos correctamente');
+    return;
+  }
+  const id = reservas.length ? reservas[reservas.length - 1].id + 1 : 1;
+  reservas.push({ id, fecha, personas });
+  document.getElementById('fecha').value = '';
+  document.getElementById('personas').value = '';
+  mostrarReservas();
+}
+
+function mostrarReservas() {
+  const div = document.getElementById('lista-reservas');
+  div.innerHTML = '';
+
+  reservas.forEach(r => {
+    if (asignaciones[r.id]) return;
+
+    const li = document.createElement('li');
+    li.textContent = `ID ${r.id} | ${r.fecha} | ${r.personas} personas`;
+
+    const btnEditar = document.createElement('button');
+    btnEditar.textContent = 'Editar';
+    btnEditar.onclick = () => editarReserva(r.id);
+
+    const btnEliminar = document.createElement('button');
+    btnEliminar.textContent = 'Eliminar';
+    btnEliminar.onclick = () => eliminarReserva(r.id);
+
+    li.appendChild(btnEditar);
+    li.appendChild(btnEliminar);
+
+    const asignacionDiv = document.createElement('div');
+    asignacionDiv.className = 'asignacion';
+
+    const disponibles = mesasDisponiblesParaFecha(r.fecha);
+
+    if (disponibles.length === 0) {
+      asignacionDiv.innerHTML = `⚠️ No hay mesas disponibles para ${r.fecha}. Cree mesas para ese día.`;
+    } else {
+      asignacionDiv.innerHTML = `<b>Mesas disponibles para esta reserva:</b><br>`;
+      disponibles.forEach(m => {
+        const label = document.createElement('label');
+        label.innerHTML = `
+          <input type="checkbox" class="mesaAsignable" data-reserva="${r.id}" value="${m.numero}">
+          Mesa ${m.numero} (Cap: ${m.capacidad})
+        `;
+        asignacionDiv.appendChild(label);
+      });
+
+      const btnAsignar = document.createElement('button');
+      btnAsignar.textContent = 'Asignar Mesas';
+      btnAsignar.onclick = () => asignarMesas(r.id);
+      asignacionDiv.appendChild(btnAsignar);
     }
 
-    const id = mesas.length ? mesas[mesas.length - 1].id + 1 : 1;
-    mesas.push({ id, numero_mesa: numero, capacidad });
-    formCrearMesa.reset();
-    cargarMesas();
-});
+    li.appendChild(asignacionDiv);
+    div.appendChild(li);
+  });
 
-// Editar mesa
-function editarMesa(id) {
-    const mesa = mesas.find(m => m.id === id);
-    const nuevoNumero = prompt('Nuevo número de mesa:', mesa.numero_mesa);
-    if (nuevoNumero === null) return;
-
-    let nuevaCapacidad = prompt('Nueva capacidad (máx. 4):', mesa.capacidad);
-    if (nuevaCapacidad === null) return;
-    nuevaCapacidad = parseInt(nuevaCapacidad);
-
-    if (nuevaCapacidad > 4) {
-        alert('Máximo 4 personas por mesa.');
-        return;
-    }
-
-    mesa.numero_mesa = parseInt(nuevoNumero);
-    mesa.capacidad = nuevaCapacidad;
-    cargarMesas();
+  mostrarResumen();
 }
 
-// Eliminar mesa
-function eliminarMesa(id) {
-    if (!confirm('¿Seguro que quieres eliminar esta mesa?')) return;
-    mesas = mesas.filter(m => m.id !== id);
-    reservas = reservas.filter(r => r.mesa_id !== id); // eliminar reservas de esa mesa
-    cargarMesas();
-    cargarReservas();
-}
-
-// ------------------ FUNCIONES RESERVAS ------------------
-function cargarSelectMesas() {
-    selectMesa.innerHTML = '';
-    mesas.forEach(m => {
-        const option = document.createElement('option');
-        option.value = m.id;
-        option.textContent = `Mesa ${m.numero_mesa} (Capacidad: ${m.capacidad})`;
-        selectMesa.appendChild(option);
-    });
-}
-
-function cargarReservas() {
-    listaReservas.innerHTML = '';
-    reservas.forEach(reserva => {
-        const li = document.createElement('li');
-        const mesa = mesas.find(m => m.id === reserva.mesa_id);
-        li.textContent = `ID ${reserva.id} - Mesa ${mesa.numero_mesa} - ${reserva.personas} personas`;
-
-        const btnEditar = document.createElement('button');
-        btnEditar.textContent = 'Editar';
-        btnEditar.onclick = () => editarReserva(reserva.id);
-
-        const btnEliminar = document.createElement('button');
-        btnEliminar.textContent = 'Eliminar';
-        btnEliminar.onclick = () => eliminarReserva(reserva.id);
-
-        li.appendChild(btnEditar);
-        li.appendChild(btnEliminar);
-        listaReservas.appendChild(li);
-    });
-}
-
-// Crear reserva
-formReserva.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const mesa_id = parseInt(selectMesa.value);
-    const personas = parseInt(document.getElementById('personas').value);
-
-    const id = reservas.length ? reservas[reservas.length - 1].id + 1 : 1;
-    reservas.push({ id, mesa_id, personas });
-    formReserva.reset();
-    cargarReservas();
-});
-
-// Editar reserva
 function editarReserva(id) {
-    const reserva = reservas.find(r => r.id === id);
-
-    let nuevaMesa = prompt('ID de mesa:', reserva.mesa_id);
-    if (nuevaMesa === null) return;
-    nuevaMesa = parseInt(nuevaMesa);
-
-    let nuevasPersonas = prompt('Cantidad de personas:', reserva.personas);
-    if (nuevasPersonas === null) return;
-    nuevasPersonas = parseInt(nuevasPersonas);
-
-    reserva.mesa_id = nuevaMesa;
-    reserva.personas = nuevasPersonas;
-    cargarReservas();
+  const r = reservas.find(x => x.id === id);
+  const nuevaCant = prompt('Nueva cantidad de personas:', r.personas);
+  if (!nuevaCant) return;
+  r.personas = parseInt(nuevaCant);
+  mostrarReservas();
 }
 
-// Eliminar reserva
 function eliminarReserva(id) {
-    if (!confirm('¿Seguro que quieres eliminar esta reserva?')) return;
-    reservas = reservas.filter(r => r.id !== id);
-    cargarReservas();
+  if (asignaciones[id]) {
+    delete asignaciones[id];
+  }
+  reservas = reservas.filter(r => r.id !== id);
+  mostrarReservas();
+  mostrarResumen();
 }
 
-// ------------------ INICIALIZACIÓN ------------------
-cargarMesas();
-cargarSelectMesas();
-cargarReservas();
+// ------------------ ASIGNACIÓN ------------------
+function asignarMesas(idReserva) {
+  const reserva = reservas.find(r => r.id === idReserva);
+  if (!reserva) return alert('Reserva no encontrada');
+
+  const checkboxes = document.querySelectorAll(`.mesaAsignable[data-reserva="${idReserva}"]:checked`);
+  const seleccionadas = Array.from(checkboxes).map(c => parseInt(c.value));
+
+  if (seleccionadas.length === 0) return alert('Seleccione al menos una mesa');
+
+  const mesasSel = mesas.filter(m => seleccionadas.includes(m.numero) && m.fecha === reserva.fecha);
+  const capacidadTotal = mesasSel.reduce((acc, m) => acc + m.capacidad, 0);
+
+  if (capacidadTotal < reserva.personas) {
+    return alert(`Capacidad insuficiente. Faltan ${reserva.personas - capacidadTotal} lugares.`);
+  }
+
+  asignaciones[idReserva] = mesasSel.map(m => m.numero);
+  mostrarMesas();
+  mostrarReservas();
+}
+
+// ------------------ RESUMEN ------------------
+function mostrarResumen() {
+  const div = document.getElementById('resumen');
+  div.innerHTML = '';
+  reservas.forEach(r => {
+    const mesasAsignadas = asignaciones[r.id] || [];
+    div.innerHTML += `Reserva ${r.id} (${r.fecha}): ${r.personas} personas - Mesas: ${mesasAsignadas.length ? mesasAsignadas.join(', ') : 'sin mesas'}<br>`;
+  });
+}
+
+// ------------------ UTILIDAD ------------------
+function mesasDisponiblesParaFecha(fecha) {
+  const ocupadas = Object.entries(asignaciones)
+    .filter(([id, _]) => {
+      const r = reservas.find(x => x.id == id);
+      return r && r.fecha === fecha;
+    })
+    .flatMap(([_, nums]) => nums);
+
+  return mesas.filter(m => m.fecha === fecha && !ocupadas.includes(m.numero));
+}

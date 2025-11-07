@@ -1,24 +1,23 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gestor de Reservas y Mesas</title>
-<style>
-body { font-family: Arial; margin: 20px; background: #f7f7f7; }
-h2 { color: #333; }
-section { background: white; padding: 15px; margin-bottom: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-button { padding: 5px 10px; margin: 3px; cursor: pointer; border-radius: 6px; }
-input, select { padding: 5px; margin: 3px; }
-.mesa, .reserva { margin-bottom: 5px; }
-.asignacion { margin-left: 10px; display: inline-block; }
-.checkbox-group label { display: inline-block; margin-right: 10px; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestor de Reservas y Mesas</title>
+  <style>
+    body { font-family: Arial; margin: 20px; background: #f7f7f7; }
+    h2 { color: #333; }
+    section { background: white; padding: 15px; margin-bottom: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    button { padding: 5px 10px; margin: 3px; cursor: pointer; border-radius: 6px; }
+    input, select { padding: 5px; margin: 3px; }
+    .mesa, .reserva { margin-bottom: 5px; }
+    .asignacion { margin-left: 10px; display: inline-block; margin-top: 10px; background: #eef; padding: 10px; border-radius: 6px; }
+    .checkbox-group label { display: inline-block; margin-right: 10px; }
+  </style>
 </head>
 <body>
 
-<h1>Gestor de Mesas y Reservas </h1>
-
+<h1>Gestor de Mesas y Reservas</h1>
 
 <section>
   <h2>Mesas</h2>
@@ -72,8 +71,8 @@ function actualizarSelectorMesas() {
 function crearMesa() {
   const numero = parseInt(document.getElementById('numeroMesa').value);
   const capacidad = parseInt(document.getElementById('capacidadMesa').value);
-  if (capacidad > 4) {
-    alert('La capacidad máxima permitida es 4 personas por mesa.');
+  if (capacidad > 4 || capacidad < 1) {
+    alert('La capacidad debe estar entre 1 y 4.');
     return;
   }
   mesas.push({ numero, capacidad, disponible: true });
@@ -100,8 +99,8 @@ function editarMesa(numero) {
   const nuevaCap = prompt('Nueva capacidad:');
   if (!nuevaCap) return;
   const cap = parseInt(nuevaCap);
-  if (cap > 4) {
-    alert('La capacidad máxima permitida es 4 personas por mesa.');
+  if (cap > 4 || cap < 1) {
+    alert('La capacidad debe estar entre 1 y 4.');
     return;
   }
   const mesa = mesas.find(m => m.numero == numero);
@@ -134,27 +133,26 @@ function crearReserva() {
 function mostrarReservas() {
   const div = document.getElementById('listaReservas');
   div.innerHTML = '';
-  const hoy = new Date().toISOString().split('T')[0];
 
   reservas.forEach(r => {
-    const d = document.createElement('div');
-    d.className = 'reserva';
-    let html = `ID ${r.id} | ${r.fecha} | ${r.personas} personas 
-      <button onclick="editarReserva(${r.id})">Editar</button>
-      <button onclick="eliminarReserva(${r.id})">Eliminar</button>`;
+    if (!asignaciones[r.id] || asignaciones[r.id].length === 0) {
+      const d = document.createElement('div');
+      d.className = 'reserva';
+      let html = `ID ${r.id} | ${r.fecha} | ${r.personas} personas 
+        <button onclick="editarReserva(${r.id})">Editar</button>
+        <button onclick="eliminarReserva(${r.id})">Eliminar</button>`;
 
-    if (r.fecha === hoy && (!asignaciones[r.id] || asignaciones[r.id].length === 0)) {
-      html += `<div class="asignacion"><b>Mesas disponibles para esta reserva:</b> `;
+      html += `<div class="asignacion"><b>Mesas disponibles para esta reserva:</b><br>`;
       mesas.filter(m => m.disponible).forEach(m => {
         html += `<label>
           <input type="checkbox" class="mesaAsignable" data-reserva="${r.id}" value="${m.numero}"> Mesa ${m.numero} (Cap: ${m.capacidad})
-        </label>`;
+        </label><br>`;
       });
       html += `<button onclick="asignarMesas(${r.id})">Asignar Mesas</button></div>`;
-    }
 
-    d.innerHTML = html;
-    div.appendChild(d);
+      d.innerHTML = html;
+      div.appendChild(d);
+    }
   });
   mostrarResumen();
 }
@@ -202,13 +200,34 @@ function asignarMesas(idReserva) {
   mostrarReservas();
 }
 
+// ------------------ CIERRE ------------------
+function cerrarMesas(idReserva) {
+  const mesasLiberadas = asignaciones[idReserva];
+  if (mesasLiberadas) {
+    mesasLiberadas.forEach(n => {
+      const m = mesas.find(mesa => mesa.numero === n);
+      if (m) m.disponible = true;
+    });
+    delete asignaciones[idReserva];
+  }
+  reservas = reservas.filter(r => r.id !== idReserva);
+  mostrarMesas();
+  mostrarReservas();
+  mostrarResumen();
+}
+
 // ------------------ RESUMEN ------------------
 function mostrarResumen() {
   const div = document.getElementById('resumen');
   div.innerHTML = '';
   reservas.forEach(r => {
     const mesasAsignadas = asignaciones[r.id] || [];
-    div.innerHTML += `Reserva ${r.id}: ${r.personas} personas - Mesas: ${mesasAsignadas.length ? mesasAsignadas.join(', ') : 'sin mesas'}<br>`;
+    if (mesasAsignadas.length > 0) {
+      const p = document.createElement('p');
+      p.innerHTML = `Reserva ${r.id} (${r.fecha}): ${r.personas} personas - Mesas: ${mesasAsignadas.join(', ')} 
+        <button onclick="cerrarMesas(${r.id})">Cerrar mesas</button>`;
+      div.appendChild(p);
+    }
   });
 }
 
